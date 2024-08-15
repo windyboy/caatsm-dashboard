@@ -1,0 +1,61 @@
+version: '3'
+
+vars:
+  BINARY_NAME: telegram
+  BUILD_DIR: ./bin
+  TMP_DIR: ./tmp
+  CSS_SOURCE: views/css/main.css
+  CSS_TARGET: public/styles.css
+  TEMPL_DIR: .
+
+tasks:
+  default:
+    cmds:
+      - task: build
+      - task: css
+      - task: templ
+    desc: Default task to build the project, generate CSS, and format templates
+
+  build:
+    cmds:
+      - echo "Building Go binary..."
+      - go build -o {{.BUILD_DIR}}/{{.BINARY_NAME}} .
+      - echo "Build complete."
+    desc: Build the Go binary
+
+  clean:
+    cmds:
+      - echo "Cleaning up..."
+      - rm -rf {{.BUILD_DIR}} {{.TMP_DIR}}
+      - echo "Cleanup complete."
+    desc: Clean up build and temporary directories
+
+  css:
+    cmds:
+      - echo "Generating CSS with TailwindCSS..."
+      - tailwindcss -i {{.CSS_SOURCE}} -o {{.CSS_TARGET}}
+      - echo "CSS generation complete."
+    desc: Generate CSS with TailwindCSS
+
+  css-dev:
+    cmds:
+      - echo "Generating CSS with TailwindCSS in development mode..."
+      - tailwindcss -i {{.CSS_SOURCE}} -o {{.CSS_TARGET}} --watch
+      - echo "CSS generation complete."
+    desc: Generate CSS with TailwindCSS in development mode
+
+  templ:
+    cmds:
+      - echo "Formatting and generating templates..."
+      - templ fmt {{.TEMPL_DIR}}
+      - templ generate
+      - echo "Template formatting and generation complete."
+    desc: Format and generate templates
+
+  deps:
+    cmds:
+      - echo "Installing dependencies..."
+      - go get -u -d -v ./...
+      - go mod tidy
+      - echo "Dependencies installed."
+    desc: Install dependencies

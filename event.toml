@@ -1,0 +1,14 @@
+[nats]
+url = "nats://localhost:4222"
+cluster_id = "test-cluster"
+client_id = "test-client"
+
+[subscription]
+topic = "Telegram.Serial"
+queue_group = "telegram-group"
+
+[timeouts]
+server_timeout = 30
+reconnect_wait = 5
+close_timeout = 10
+ack_wait_timeout = 20
