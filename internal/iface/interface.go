@@ -1,6 +1,6 @@
 package iface
 
-import "casstm-dashboard/internal/config"
+import "context"
 
 type MessageHandler interface {
 	HandleMessage(msg []byte, id string) error
@@ -11,7 +11,7 @@ type MessagePublisher interface {
 }
 
 type MessageSubscriber interface {
-	Subscribe(config *config.Config) error
+	Subscribe(ctx context.Context, handler MessageHandler) error
 }
 
 // type MessageRepository interface {

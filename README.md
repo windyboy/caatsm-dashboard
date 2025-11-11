@@ -1,103 +1,100 @@
-Based on the provided documents, here is a review and verification of the telegram body messages as described in the MH/T 4007-2023 document.
+## CAATSM Dashboard
 
-### Overview of Telegram Body Messages
+CAATSM Dashboard is a lightweight Go application that renders a web UI for monitoring civil-aviation telegram traffic. It combines an HTTP server (Echo), HTML templating (`github.com/a-h/templ`), and an optional NATS subscriber (Watermill) to receive and display telegram data.
 
-The MH/T 4007-2023 document outlines various types of telegram messages used in civil aviation air traffic services. Each type of message has a specific format and a designated code. Here are the key message types mentioned in the document:
+- `main.go` bootstraps the Echo server, serves static assets under `/public`, and wires HTTP routes.
+- `handlers` defines Echo handlers and shared helpers for rendering templ components.
+- `views` holds templ templates. `Base.templ` defines the shared layout while `index.templ` renders a placeholder dashboard.
+- `internal/config` loads strongly typed configuration from `configs/config.<env>.toml`.
+- `internal/nats` provides a Watermill-based subscriber that streams telegram messages from NATS to user-defined handlers.
+- `pkg/utils/log.go` exposes a Zap logger with environment-aware configuration.
 
-1. **现行飞行计划报 (CPL message)**:
-   - Used for sending the current flight plan data from one unit to another.
-   - Code: "CPL".
+## Prerequisites
 
-2. **修订领航计划报 (FPL modification message)**:
-   - Used for sending changes to a flight plan.
-   - Code: "CHG".
+- Go 1.25+
+- Node.js/npm or pnpm (for managing static dependencies such as Flowbite and Tailwind)
+- Optional: a running NATS server if you need real telegram ingestion
 
-3. **取消领航计划报 (FPL cancellation message)**:
-   - Used for canceling a previously submitted flight plan.
-   - Code: "CNL".
+## Getting Started
 
-4. **起飞报 (departure message)**:
-   - Used for notifying the take-off time of an aircraft.
-   - Code: "DEP".
+```bash
+# Install Go dependencies
+go mod download
 
-5. **落地报 (arrival message)**:
-   - Used for notifying the arrival time of an aircraft.
-   - Code: "ARR".
-
-6. **延误报 (delay message)**:
-   - Used for notifying delays in an aircraft's schedule.
-   - Code: "DLA".
-
-7. **预计飞越报 (estimate message)**:
-   - Used for notifying estimated time, altitude, and SSR code of an aircraft at a transfer or boundary point.
-   - Code: "EST".
-
-8. **管制协调报 (co-ordination message)**:
-   - Used for coordinating changes in CPL or EST reports before transfer of control between units.
-   - Code: "CDN".
-
-9. **管制协调接受报 (acceptance message)**:
-   - Used for acknowledging the acceptance of data contained in a CDN report.
-   - Code: "ACP".
-
-10. **逻辑确认报 (logical acknowledgement message)**:
-    - Used by a flight data processing system to notify the processing of CPL, EST, or other related messages.
-    - Code: "LAM".
-
-11. **请求飞行计划报 (request flight plan message)**:
-    - Used for requesting flight data such as FPL or CPL.
-    - Code: "RQP".
-
-12. **请求补充飞行计划报 (request supplementary flight plan message)**:
-    - Used for requesting supplementary flight plan data.
-    - Code: "RQS".
-
-13. **补充飞行计划报 (supplementary flight plan message)**:
-    - Sent in response to an RQS, containing supplementary flight plan information.
-    - Code: "SPL".
-
-14. **告警报 (alerting message)**:
-    - Used for alerting relevant units when an aircraft is in an emergency situation as defined in ICAO Annex 11, Chapter 5.
-    - Code: "ALR".
-
-15. **无线电通信失效报 (radio communication failure message)**:
-    - Used to notify other units about an aircraft experiencing radio communication failure.
-    - Code: "RCF"【10†source】  .
-
-### Example of Telegram Structure
-
-The document also specifies the basic structure of a telegram, which typically includes:
-- Start signal (if any)
-- Header
-- Recipient address
-- Sender address
-- Message content
-- End signal
-
-**Example Structure:**
-```
-Start Signal (optional)
-Header
-Recipient Address
-Sender Address
-Message Content
-End Signal
+# Install frontend dependencies (used for styles and supporting assets)
+npm install
 ```
 
-**Example Telegram:**
+### Environment variables
+
+Most runtime options are driven through files in `configs/` and can be overridden with environment variables (Viper is configured with the `TELE_` prefix). Create a `.env` if you want local defaults, otherwise export the variables directly:
+
 ```
-ZCZC TMQ2599 142117
-FF ZBTJZXZX
-142117 ZSPDZPZX
-(FPL-CYZ9018-IS
--B734/M-SHDIRWZ/C
--ZSPD2335
--K0820S0980 PIKAS G330 PIMOL A593 VYK A326 CG
--ZBTJ0146 ZBAA
--EET/ZBPE0115 REG/B2892 SEL/ASEQ OPR/CHINA POSTAL NAV/RNAV5 RMK/TCAS EQUIPPED-E/0318 P/TBN A/WHITE)
-NNNN
+LISTEN_ADDR=:3002
+GO_ENV=dev
+TELE_MODE=dev
+TELE_HASURA_SECRET=replace-me
 ```
 
-### Conclusion
+Note: `.env` is optional—missing files emit a warning but do not abort startup.
 
-The MH/T 4007-2023 document provides comprehensive guidelines on various types of telegram messages used in civil aviation, each with specific codes and structured formats. This ensures standardized communication across air traffic services. If you need further details or specific examples from the document, please let me know!
+### Configuration files
+
+- `configs/config.dev.toml` – development defaults for server port, NATS, subscription topic, and timeout values.
+- `configs/logger.dev.json` – Zap logger settings.
+- `event.toml` – sample event bus configuration retained for reference.
+
+> ⚠️ Do not commit production secrets. Override `hasura.secret` with the `TELE_HASURA_SECRET` environment variable (the default file purposely leaves it blank).
+
+## Running the Server
+
+```bash
+go run .
+```
+
+The dashboard will be available at `http://localhost:3002/` (or whatever `LISTEN_ADDR` specifies). Static assets are served from `public/`.
+
+## NATS Subscriber (Optional)
+
+`internal/nats/sub.go` wraps Watermill’s NATS integration and now executes handlers via a small worker pool to avoid blocking the subscription loop. To consume messages:
+
+1. Load configuration using `internal/config.LoadConfig()`.
+2. Construct a subscriber with `nats.NewSub(config)`.
+3. Implement `iface.MessageHandler` and pass it to `Subscribe`, providing a `context.Context` for lifecycle management.
+
+The subscriber logs via `pkg/utils` and lets your handler decide how to process payloads (e.g., render them in the dashboard, persist to storage, emit metrics).
+
+## Development Workflow
+
+- Update templ components under `views/` and rerun the server. Templ recompilation occurs on `go run` or `go build`.
+- Customize Tailwind/Flowbite assets under `public/` or via build tools referenced in `package.json`/`tailwind.config.js`.
+- Consider adding tests around configuration loading and NATS integration with `go test ./...`.
+
+## Project Structure
+
+```
+.
+├── configs/              # TOML & logger settings
+├── handlers/             # Echo route setup and render helpers
+├── internal/
+│   ├── config/           # Viper-backed configuration loader
+│   ├── iface/            # Interfaces for messaging components
+│   └── nats/             # Watermill-based NATS subscriber
+├── pkg/utils/            # Shared utilities (logging)
+├── public/               # Static assets (icons, styles, scripts)
+├── views/                # templ components used by the dashboard
+└── main.go               # Application entry point
+```
+
+## Troubleshooting
+
+- **Missing `.env`** – Startup logs a warning; export the required `TELE_` variables or create a local `.env`.
+- **NATS connection errors** – Ensure the URL, credentials, and TLS settings in `config.<env>.toml` (or corresponding env vars) match your NATS deployment.
+- **Template rendering failures** – Echo now reports HTTP 500 with a logged error when rendering fails; check templ components and handler logic.
+
+## Next Steps
+
+- Flesh out the dashboard by wiring real telegram message handlers.
+- Harden configuration (environment overrides, production secrets management, TLS).
+- Add automated tests for handlers, config loading, and message processing (`go test ./...` provides a baseline).
+
